@@ -16,3 +16,4 @@ if __name__=="__main__":
     train_label = processor.loadLabels(config.get('DEFAULT','train_labels_file'))
     test_data = processor.loadMNISTimages(config.get('DEFAULT','test_images_file'))
     test_label = processor.loadLabels(config.get('DEFAULT','test_labels_file'))
+    

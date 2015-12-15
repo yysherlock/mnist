@@ -35,8 +35,8 @@ class mnistProcessor(object):
         plt.imshow(im, cmap='gray')
         plt.show()
         """
-        print data.shape
-        return data
+        # print data.shape
+        return data # size x rows x cols numpy array
 
     def loadLabels(self, filename):
         binf = open(filename, 'rb')
@@ -46,3 +46,4 @@ class mnistProcessor(object):
             data[i] = np.array(struct.unpack(">1B", binf.read(1)))
         binf.close()
         # print type(data[0]), data[0].shape, data[0]
+        return data # size x 1 numpy array
