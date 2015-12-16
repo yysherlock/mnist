@@ -1,5 +1,6 @@
 import unittest
 import configparser
+import matplotlib.pyplot as plt
 
 from mnistProcessor import *
 
@@ -20,6 +21,12 @@ class TestMnistProcessor(unittest.TestCase):
     def test_loadLabels(self):
         train_label = self.processor.loadLabels(self.config.get('DEFAULT','train_labels_file'))
         self.assertEqual(train_label.shape[1], 1)
+
+    def test_loadMNISTimages_show(self):
+        train_data = self.processor.loadMNISTimages(self.config.get('DEFAULT','train_images_file'))
+        im = train_data[0]
+        plt.imshow(im, cmap='gray')
+        plt.show()
 
 if __name__=="__main__":
     unittest.main()
