@@ -17,7 +17,6 @@ class TestMnistProcessor(unittest.TestCase):
         self.assertEqual(train_data.shape[1], 28)
         self.assertEqual(train_data.shape[2], 28)
 
-
     def test_loadLabels(self):
         train_label = self.processor.loadLabels(self.config.get('DEFAULT','train_labels_file'))
         self.assertEqual(train_label.shape[1], 1)
