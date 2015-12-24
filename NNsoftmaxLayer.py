@@ -17,9 +17,9 @@ class NNsoftmaxLayer(NNLayer):
 
     def computeDlast(self):
         """
-        dJ/dz1, this is the `d` for last last layer
+        dJ/dz1, this is the `d` for last layer
         """
-        
+
 
 if __name__=="__main__":
     pass
