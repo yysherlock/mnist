@@ -4,14 +4,15 @@ class NN(object):
     """
 
     """
-    def __init__(self, listOflayers, computeDlast = None):
-        self.layers = [] # NN: a0 --W1.b1--> z1 --f--> a1 --W2,b2--> z2 --f--> a2
-        if computeDlast: # we can assign this function for different cost function J
-            self.computeDlast = computeDlast
-        if len(layers) > 0:
-            for i in range(len(listOflayers)):
-                vdim = listOflayers[i]
-                hdim = listOflayers[i+1]
+    def __init__(self, sizes):
+        self.num_layers = len(sizes)
+        self.sizes = sizes # NN: a0 --W1.b1--> z1 --f--> a1 --W2,b2--> z2 --f--> a2
+#        if computeDlast: # we can assign this function for different cost function J
+#            self.computeDlast = computeDlast
+        if self.num_layers > 0:
+            for i in range(self.num_layers):
+                vdim = sizes[i]
+                hdim = sizes[i+1]
 
     def init(self):
         pass
@@ -30,5 +31,3 @@ class NN(object):
         """ calculate dJ/dz, where z is output of last layer"""
 
         return (y-z)*self.getActivationGradient(a)
-
-    

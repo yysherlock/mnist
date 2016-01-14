@@ -9,7 +9,7 @@ class TestMnistProcessor(unittest.TestCase):
     def setUp(self):
         self.processor = mnistProcessor()
         self.config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        configfilePath = 'config/mnist-config.ini'
+        configfilePath = '/home/luozhiyi/projects/mnist/config/mnist-config.ini'
         self.config.read(configfilePath)
 
     def test_loadMNISTimages(self):
