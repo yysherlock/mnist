@@ -31,7 +31,7 @@ if __name__=="__main__":
     if __package__ is None: # not use as a package
         sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from util.mnistProcessor import *
-    else: from ..util.mnistProcessor import * # use as a package, out of mnist dir:
-                                                                # python -m mnist.NN.nn
+    else: from ..util.mnistProcessor import * # use as a package
+                                        # out of mnist dir: python -m mnist.NN.nn
 
     unittest.main()
