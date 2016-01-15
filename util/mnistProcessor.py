@@ -76,3 +76,16 @@ class mnistProcessor(object):
         binf.close()
         # print type(data[0]), data[0].shape, data[0]
         return data # size x 1 numpy array
+
+    def loadLabels_v1(self, filename):
+        binf = open(filename, 'rb')
+        magic_nr, size = struct.unpack(">II", binf.read(8))
+        data = np.empty([size,1], dtype = np.int8) # label range from 0 to 9
+        for i in range(size):
+            data[i] = np.array(struct.unpack(">1B", binf.read(1)))
+        binf.close()
+        print type(data[0]), data[0].shape, data[0], data.shape, data[:,0].shape
+        labels = np.zeros([len(data), 10])
+        targets = zip(np.array(range(data.shape[0])), data[:,0])
+        for t in targets: labels[t] = 1.0
+        return labels # size x 10 numpy array
