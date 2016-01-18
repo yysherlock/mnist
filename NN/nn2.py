@@ -7,7 +7,7 @@ def sigmoid(z):
     return 1.0/(1.0+np.exp(-z))
 
 def transform_output(data_label, length = 10):
-    output = np.zeros([len(data_label), length]) # N x length
+    output = np.zeros([len(data_label), length])
     targets = zip(np.array(range(data_label.shape[0])), data_label[:,0])
     for t in targets: output[t] = 1.0
     return output
@@ -44,7 +44,6 @@ class NeuralNetwork(object):
         converge = False
         iteration = 0
         start = 0
-        train_label = transform_output(train_data)
 
         while not converge and iteration < self.maxecho:
 
@@ -56,39 +55,18 @@ class NeuralNetwork(object):
             batch_label = train_label[start:end]
             start = end
 
-            wgradients, bgradients = self.mini_batch(batch_data, batch_label) # apply on all layers
+            wgradients, bgradients = self.applygradient(batch_data, batch_label) # apply on all layers
 
-            print 'cost:', self.cost(self.predict_output(train_data), train_label), \
-            'acc:', self.evaluate(train_data, train_label)
+            print 'cost:', self.cost(self.predict_output(train_data), train_label)
 
             wgradients_magnitude = np.array([ np.linalg.norm(wgradient) for wgradient in wgradients ])
             bgradients_magnitude = np.array([ np.linalg.norm(bgradient) for bgradient in bgradients ])
             self.update(wgradients, bgradients)
-            if np.sum(wgradients_magnitude) < self.tolerance and np.sum(bgradients_magnitude) < self.tolerance:
+            if np.all(wgradients_magnitude < self.tolerance) and np.all(bgradients_magnitude < self.tolerance):
                 converge = True
 
             iteration += 1
             print 'iteration:',iteration
-
-        print self.weights, self.biases
-
-    def mini_batch(self, batch_data, batch_label):
-        sz = batch_label.shape[0]
-        avg_wgradients = [np.zeros(weight.shape) for weight in self.weights]
-        avg_bgradients = [np.zeros(bias.shape) for bias in self.biases]
-
-        for i in xrange(len(batch_label)):
-            data = batch_data[i][np.newaxis].T # ith row, v x 1
-            label = batch_label[i][np.newaxis].T #
-            wgradients, bgradients = self.applygradient(data, label)
-            for i in xrange(len(avg_wgradients)):
-                avg_wgradients[i] += wgradients[i]
-            for i in xrange(len(avg_bgradients)):
-                avg_bgradients[i] += bgradients[i]
-        for i in xrange(len(avg_wgradients)): avg_wgradients[i] = avg_wgradients[i]/float(sz)
-        for i in xrange(len(avg_bgradients)): avg_bgradients[i] = avg_bgradients[i]/float(sz)
-
-        return (avg_wgradients, avg_bgradients)
 
     def update(self, wgradients, bgradients):
         for idx in xrange(self.L):
@@ -104,37 +82,81 @@ class NeuralNetwork(object):
         wgradients = []
         bgradients = []
         # generate outputs for each layer, i.e. ai for each layer i
-        a0 = train_data # (784,1)
+        a0 = train_data # a0 = self.normalize(train_data)
         outputs = [a0] # output[i] represents ai, i range from 0 to L
         for idx in xrange(self.L):
             weight = self.weights[idx] # weight: h x v
             bias = self.biases[idx] # bias: h x 1
-            a0 = self.feedforward(a0, weight, bias) # h x 1
+            #print 'weight: ', weight.shape, 'bias:',bias.shape
+            a0 = self.feedforward(a0, weight, bias) # N x h
             outputs.append(a0)
 
-        # d: h x 1
-        d = - outputs[self.L] * (1-outputs[self.L]) * (train_label-outputs[self.L]) # at layer L, initial, 10 x 1
+        labels = transform_output(train_label, 10) # N x 10
+
+        # d: N x h
+        #d = - outputs[self.L] * (1-outputs[self.L]) * np.sum(labels-outputs[self.L], axis=0)# at layer L, initial
+        d = - outputs[self.L] * (1-outputs[self.L]) * (labels-outputs[self.L])
         for l in xrange(self.L-1,-1,-1): # L-1 ~ 0
             # calculate gradient at layer l, l range from L-1 to 0
-            # at layer l, current d is at l+1
             a0 = outputs[l]
             a1 = outputs[l+1]
-            wgradient = np.dot(d,a0.T) # h x 1,1 x v -> h x v
-            bgradient = d # h x 1
+            #print np.sum(d, axis = 0)[np.newaxis].T.shape,
+            #wgradient = 1.0/len(train_data) * np.dot(a0 ,(np.sum(d, axis = 0)[np.newaxis].T * self.weights[l]).T)
+            wgradient = 1.0/len(train_data) * np.dot(d.T,a0) # average gradient of all points
+            bgradient = 1.0/len(train_data) * np.sum(d, axis = 0)[np.newaxis].T
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
             # update d for next layer, i.e. layer l-1
-            d = np.dot(self.weights[l].T,d) * (a0*(1-a0)) # d at layer l
-            # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
+            #d = sigmoid(a0) * np.dot(d, self.weights[l]) # N x h, h x v -> N x v * N x v -> N x v
+            d = a0*(1-a0) * np.dot(d, self.weights[l]) # N x h, h x v -> N x v * N x v -> N x v
+            #d = 1.0/len(train_data) * np.dot(np.sum(d, axis = 0)[np.newaxis].T * self.weights[l], sigmoid(a0).T).T
         return (wgradients, bgradients)
+
+    def computeNumericGradient(self, input, factor=1.0, eps=1e-4, sampleNum=500):
+        """
+        compute gradients throught numeric way for gradient check
+        gradient of J w.r.t. x computed by (J(x+eps)-J(x-eps))/2eps
+        only check param at sampleNum positions
+        J=0.5*(a[0]-a[-1])**2+WeightCost
+        """
+        param=self.combineParam()
+        plen=param.size
+        if factor==0:
+            plen=plen/2
+        sample=np.random.randint(0,plen,sampleNum)
+        grad=gp.zeros(sampleNum)
+        for (i,idx) in enumerate(sample):
+            if i%100==0:
+                sys.stdout.write('.')
+                sys.stdout.flush()
+            q=gp.zeros(param.shape)
+            q[idx]=eps
+            p1=param+q
+            p2=param-q
+            c1,_=self.getCost(p1, input,factor)
+            c2,_=self.getCost(p2, input,factor)
+            grad[i]=(c1-c2)/(2.0*eps)
+        print "end"
+        return grad, sample
+
+    def gradientCheck(self, dat):
+        """
+        check gradient by comparing with numeric computing
+        it should be done on cpu
+        """
+        print "doing gradient check..."
+
+        a=self.forward(dat)
+        pgrad=self.computeGrads(a)
+        pgrad=self.vectorParam(pgrad)
+
+        pnumeric,idx=self.computeNumericGradient(dat)
+        pgrad=pgrad[idx]
+        diff= (pgrad-pnumeric).euclid_norm()/(pgrad+pnumeric).euclid_norm()
+        print "the diff is %.15f, which should be very small" % diff
 
 
     def feedforward(self, a0, weight, bias):
-        """ a0 -- z1 -- a1, return a1 """
-        a1 = sigmoid(np.dot(weight, a0) + bias) # h x v, v x 1
-        return a1 # h x 1
-
-    def feedforward_all(self, a0, weight, bias):
         """ a0 -- z1 -- a1, return a1, for N examples """
         a1 = sigmoid(np.dot(weight, a0.T) + bias) # h x N
         return a1.T # N x h
@@ -145,7 +167,7 @@ class NeuralNetwork(object):
             bias = self.biases[idx] # bias: h x 1
             #input_data = sigmoid(np.dot(weight, input_data.T) + bias) # h x N
             #input_data = input_data.T # N x h, i.e. N x v in the next iteration
-            input_data = self.feedforward_all(input_data, weight, bias) # N x h
+            input_data = self.feedforward(input_data, weight, bias) # N x h
         output = input_data # N x 10
         return np.argmax(output, axis = 1).T #  1 x N
 
@@ -155,7 +177,7 @@ class NeuralNetwork(object):
             bias = self.biases[idx] # bias: h x 1
             #input_data = sigmoid(np.dot(weight, input_data.T) + bias) # h x N
             #input_data = input_data.T # N x h, i.e. N x v in the next iteration
-            input_data = self.feedforward_all(input_data, weight, bias) # N x h
+            input_data = self.feedforward(input_data, weight, bias) # N x h
         output = input_data # N x 10
         return output
 
@@ -179,7 +201,7 @@ class TestNeuralNetwork(unittest.TestCase):
 
         opt = {'learning_rate':1.0, \
         'weight_decay': 1e-3, \
-        'tolerance':0.01, \
+        'tolerance':1e-3, \
         'batch_size':100, \
         'maxecho': 1000}
         self.nn = NeuralNetwork([784, 30, 10], opt)
