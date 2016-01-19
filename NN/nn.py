@@ -119,18 +119,15 @@ class NeuralNetwork(object):
         h,v = theta.shape
         sample = np.random.randint(0, h*v, sampleNum)
         grad = np.zeros(sampleNum)
+
         for i,idx in enumerate(sample):
             # change theta
-            try:
-                theta[idxmapping(idx,h,v)] += epsilon
-                c1 = self.getCost(input, label)
-                theta[idxmapping(idx,h,v)] -= 2*epsilon
-                c2 = self.getCost(input, label)
-                grad[i] = (c1 - c2) / (2*epsilon)
-                theta[idxmapping(idx,h,v)] += epsilon
-            except:
-                print 'idx, h, v:', idx, h, v
-                sys.exit(1)
+            theta[idxmapping(idx,h,v)] += epsilon
+            c1 = self.getCost(input, label)
+            theta[idxmapping(idx,h,v)] -= 2*epsilon
+            c2 = self.getCost(input, label)
+            grad[i] = (c1 - c2) / (2*epsilon)
+            theta[idxmapping(idx,h,v)] += epsilon
 
         return grad, sample
 
@@ -169,23 +166,13 @@ class NeuralNetwork(object):
             numeric_bgradient, bsample = self.computeNumericGradient(train_data.T, train_label.T, self.biases[l])
             for x,ws in enumerate(wsample):
                 index = idxmapping(ws, *self.weights[l].shape)
-                try:
-                    close = np.isclose(wgradient[index], numeric_wgradient[x])
-                except Exception as ex:
-                    print ex
-                    print 'index:',index,'wgradient shape:',wgradient.shape
-                    sys.exit(2)
+                close = np.isclose(wgradient[index], numeric_wgradient[x])
                 diffw = np.linalg.norm(wgradient[index] - numeric_wgradient[x])
                 print 'diffw:', diffw, close
 
             for x,bs in enumerate(bsample):
                 index = idxmapping(bs, *self.biases[l].shape)
-                try:
-                    close = np.isclose(bgradient[index], numeric_bgradient[x])
-                except Exception as ex:
-                    print ex
-                    print 'index:',index,'bgradient shape:',bgradient.shape
-                    sys.exit(3)
+                close = np.isclose(bgradient[index], numeric_bgradient[x])
                 diffb = np.linalg.norm(bgradient[index] - numeric_bgradient[x])
                 print 'diffb:', diffb, close
             #print 'diffw:', diffw, 'diffb:',diffb,", which should be very small"
@@ -195,10 +182,7 @@ class NeuralNetwork(object):
             #print '##',d
             #print '**',self.weights[l].T
             # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
-
-
         return (wgradients, bgradients)
-
 
     def feedforward(self, a0, weight, bias):
         """ a0 -- z1 -- a1, return a1 """
