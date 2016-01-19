@@ -60,8 +60,6 @@ class NeuralNetwork(object):
 
         while not converge and iteration < self.maxecho:
 
-            #wgradients_magnitude = self.tolerance * np.ones(len(self.weights)) + 1
-            #bgradients_magnitude = self.tolerance * np.ones(len(self.biases)) + 1
             if start == len(train_data): start = 0
             end = start + self.batch_size if start + self.batch_size <= len(train_data) else len(train_data)
             batch_data = train_data[start:end]
@@ -72,9 +70,9 @@ class NeuralNetwork(object):
 
             print 'cost:', self.cost(self.predict_output(train_data), train_label), \
             'acc:', self.evaluate(train_data, org_label)
-            print self.weights
-            print self.biases
-            print '-------------------'
+            #print self.weights
+            #print self.biases
+            #print '-------------------'
 
             wgradients_magnitude = np.array([ np.linalg.norm(wgradient) for wgradient in wgradients ])
             bgradients_magnitude = np.array([ np.linalg.norm(bgradient) for bgradient in bgradients ])
@@ -156,7 +154,6 @@ class NeuralNetwork(object):
             a0 = outputs[l]
             a1 = outputs[l+1]
             wgradient = np.dot(d,a0.T) # h x 1,1 x v -> h x v
-            #print '==', 'w',l,':', wgradient, np.sum(wgradient != 0.0)
             bgradient = d # h x 1
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
@@ -174,13 +171,9 @@ class NeuralNetwork(object):
                 index = idxmapping(bs, *self.biases[l].shape)
                 close = np.isclose(bgradient[index], numeric_bgradient[x])
                 diffb = np.linalg.norm(bgradient[index] - numeric_bgradient[x])
-                print 'diffb:', diffb, close
-            #print 'diffw:', diffw, 'diffb:',diffb,", which should be very small"
 
             # update d for next layer, i.e. layer l-1
             d = np.dot(self.weights[l].T,d) * (a0*(1-a0)) # d at layer l
-            #print '##',d
-            #print '**',self.weights[l].T
             # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
         return (wgradients, bgradients)
 
@@ -202,8 +195,6 @@ class NeuralNetwork(object):
         for idx in xrange(len(self.weights)):
             weight = self.weights[idx] # weight: h x v
             bias = self.biases[idx] # bias: h x 1
-            #input_data = sigmoid(np.dot(weight, input_data.T) + bias) # h x N
-            #input_data = input_data.T # N x h, i.e. N x v in the next iteration
             input_data = self.feedforward_all(input_data, weight, bias) # N x h
         output = input_data # N x 10
         return output
@@ -253,11 +244,6 @@ class TestNeuralNetwork(unittest.TestCase):
         print self.train_data.shape, self.test_data.shape
         self.nn.train(self.train_data, self.train_label)
         print self.nn.evaluate(self.test_data, self.test_label)
-        #print 'good'
-
-        #nn = NeuralNetwork([784, 30, 10], opt)
-        #nn.train(train_data, train_label)
-        #print nn.evaluate(test_images_file, test_labels_file) # print classification accurracy
 
 if __name__=="__main__":
     if __package__ is None: # not use as a package
