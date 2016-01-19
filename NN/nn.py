@@ -15,6 +15,15 @@ def transform_output(data_label, length = 10):
 def add_list(l1, l2):
     return [l1[i]+l2[i] for i in range(len(l1))]
 
+def idxmapping(idx, rowsize, colsize):
+    assert idx < rowsize*colsize, "idx error, out of index"
+    row = idx / colsize
+    col = idx % colsize
+    return row,col
+
+def euclid_norm(matrix):
+    return np.sqrt(np.sum(matrix**2))
+
 class NeuralNetwork(object):
     """
     Multiple layer neural NeuralNetwork
@@ -39,19 +48,7 @@ class NeuralNetwork(object):
     def normalize(self, input_data):
         input_data = input_data / 255.0
         # normalzie to standard gaussian distribution
-
         return input_data
-
-    def computeNumericGradient(self, theta):
-        """ theta: w or b
-        """
-        h,v = theta.shape
-        for i in xrange(h):
-            for j in xrange(v):
-                
-
-    def gradientCheck(self):
-        pass
 
     def train(self, train_data, train_label):
         """stochastic gradient descent version of training"""
@@ -116,6 +113,27 @@ class NeuralNetwork(object):
             self.weights[idx] -= self.learning_rate * wgradients[idx]
             self.biases[idx] -= self.learning_rate * bgradients[idx]
 
+    def computeNumericGradient(self, input, label, theta, epsilon=1e-4, sampleNum = 10):
+        """ theta: w or b
+        """
+        h,v = theta.shape
+        sample = np.random.randint(0, h*v, sampleNum)
+        grad = np.zeros(sampleNum)
+        for i,idx in enumerate(sample):
+            # change theta
+            try:
+                theta[idxmapping(idx,h,v)] += epsilon
+                c1 = self.getCost(input, label)
+                theta[idxmapping(idx,h,v)] -= 2*epsilon
+                c2 = self.getCost(input, label)
+                grad[i] = (c1 - c2) / (2*epsilon)
+                theta[idxmapping(idx,h,v)] += epsilon
+            except:
+                print 'idx, h, v:', idx, h, v
+                sys.exit(1)
+
+        return grad, sample
+
     def applygradient(self, train_data, train_label):
         """ calculate wgradients, bgradients for all layers (L-1 ~ 0)
         d: represents dJ/dz at lth layer
@@ -141,15 +159,44 @@ class NeuralNetwork(object):
             a0 = outputs[l]
             a1 = outputs[l+1]
             wgradient = np.dot(d,a0.T) # h x 1,1 x v -> h x v
-            print '==', 'w',l,':', wgradient, np.sum(wgradient != 0.0)
+            #print '==', 'w',l,':', wgradient, np.sum(wgradient != 0.0)
             bgradient = d # h x 1
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
+
+            # gradient check
+            numeric_wgradient, wsample = self.computeNumericGradient(train_data.T, train_label.T, self.weights[l])
+            numeric_bgradient, bsample = self.computeNumericGradient(train_data.T, train_label.T, self.biases[l])
+            for x,ws in enumerate(wsample):
+                index = idxmapping(ws, *self.weights[l].shape)
+                try:
+                    close = np.isclose(wgradient[index], numeric_wgradient[x])
+                except Exception as ex:
+                    print ex
+                    print 'index:',index,'wgradient shape:',wgradient.shape
+                    sys.exit(2)
+                diffw = np.linalg.norm(wgradient[index] - numeric_wgradient[x])
+                print 'diffw:', diffw, close
+
+            for x,bs in enumerate(bsample):
+                index = idxmapping(bs, *self.biases[l].shape)
+                try:
+                    close = np.isclose(bgradient[index], numeric_bgradient[x])
+                except Exception as ex:
+                    print ex
+                    print 'index:',index,'bgradient shape:',bgradient.shape
+                    sys.exit(3)
+                diffb = np.linalg.norm(bgradient[index] - numeric_bgradient[x])
+                print 'diffb:', diffb, close
+            #print 'diffw:', diffw, 'diffb:',diffb,", which should be very small"
+
             # update d for next layer, i.e. layer l-1
             d = np.dot(self.weights[l].T,d) * (a0*(1-a0)) # d at layer l
-            print '##',d
-            print '**',self.weights[l].T
+            #print '##',d
+            #print '**',self.weights[l].T
             # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
+
+
         return (wgradients, bgradients)
 
 
@@ -164,13 +211,7 @@ class NeuralNetwork(object):
         return a1.T # N x h
 
     def predict(self,input_data): # N x v, N examples and V input/visual units
-        for idx in xrange(len(self.weights)):
-            weight = self.weights[idx] # weight: h x v
-            bias = self.biases[idx] # bias: h x 1
-            #input_data = sigmoid(np.dot(weight, input_data.T) + bias) # h x N
-            #input_data = input_data.T # N x h, i.e. N x v in the next iteration
-            input_data = self.feedforward_all(input_data, weight, bias) # N x h
-        output = input_data # N x 10
+        output = self.predict_output(input_data) # N x 10
         return np.argmax(output, axis = 1).T #  1 x N
 
     def predict_output(self, input_data):
@@ -183,8 +224,20 @@ class NeuralNetwork(object):
         output = input_data # N x 10
         return output
 
+    def get_output(self,input_data): # N x v, N examples and V input/visual units
+        for idx in xrange(len(self.weights)):
+            weight = self.weights[idx] # weight: h x v
+            bias = self.biases[idx] # bias: h x 1
+            input_data = self.feedforward(input_data, weight, bias) # 1 x h
+        output = input_data # 1 x 10
+        return output #  1 x N
+
     def cost(self, output, label):
-        return 0.5 * np.sum((output - label)**2)
+        return 0.5 * np.sum((output - label)**2) #/ output.shape[0]
+
+    def getCost(self, input_data, label): # for a mini batch
+        output = self.predict_output(input_data)
+        return self.cost(output, label)
 
     def evaluate(self, test_data, test_label):
         print 'predict shape:', self.predict(test_data).shape, 'label shape:',test_label.shape
