@@ -12,6 +12,9 @@ def transform_output(data_label, length = 10):
     for t in targets: output[t] = 1.0
     return output
 
+def add_list(l1, l2):
+    return [l1[i]+l2[i] for i in range(len(l1))]
+
 class NeuralNetwork(object):
     """
     Multiple layer neural NeuralNetwork
@@ -26,8 +29,8 @@ class NeuralNetwork(object):
         for idx in xrange(len(architecture)-1):
             # follows N(0,1) distribution: np.random.randn(shape)
             # follows N(miu, sigma^2) distribution: sigma * np.random.randn(shape) + miu
-            self.weights.append( 0.001 * np.random.randn( architecture[idx+1], architecture[idx] ) ) # L x H x V (append L times: V x H)
-            self.biases.append( 0.001 * np.random.randn( architecture[idx+1], 1 ) ) # L x H (append L times: H x 1)
+            self.weights.append( 0.1 * np.random.randn( architecture[idx+1], architecture[idx] ) ) # L x H x V (append L times: V x H)
+            self.biases.append( 0.1 * np.random.randn( architecture[idx+1], 1 ) ) # L x H (append L times: H x 1)
         self.learning_rate = opt['learning_rate']
         self.tolerance = opt['tolerance']
         self.batch_size = opt['batch_size']
@@ -39,12 +42,24 @@ class NeuralNetwork(object):
 
         return input_data
 
+    def computeNumericGradient(self, theta):
+        """ theta: w or b
+        """
+        h,v = theta.shape
+        for i in xrange(h):
+            for j in xrange(v):
+                
+
+    def gradientCheck(self):
+        pass
+
     def train(self, train_data, train_label):
         """stochastic gradient descent version of training"""
         converge = False
         iteration = 0
         start = 0
-        train_label = transform_output(train_data)
+        org_label = train_label
+        train_label = transform_output(train_label)
 
         while not converge and iteration < self.maxecho:
 
@@ -59,7 +74,10 @@ class NeuralNetwork(object):
             wgradients, bgradients = self.mini_batch(batch_data, batch_label) # apply on all layers
 
             print 'cost:', self.cost(self.predict_output(train_data), train_label), \
-            'acc:', self.evaluate(train_data, train_label)
+            'acc:', self.evaluate(train_data, org_label)
+            print self.weights
+            print self.biases
+            print '-------------------'
 
             wgradients_magnitude = np.array([ np.linalg.norm(wgradient) for wgradient in wgradients ])
             bgradients_magnitude = np.array([ np.linalg.norm(bgradient) for bgradient in bgradients ])
@@ -69,6 +87,8 @@ class NeuralNetwork(object):
 
             iteration += 1
             print 'iteration:',iteration
+
+        print converge, np.sum(wgradients_magnitude), np.sum(bgradients_magnitude)
 
         print self.weights, self.biases
 
@@ -81,12 +101,13 @@ class NeuralNetwork(object):
             data = batch_data[i][np.newaxis].T # ith row, v x 1
             label = batch_label[i][np.newaxis].T #
             wgradients, bgradients = self.applygradient(data, label)
-            for i in xrange(len(avg_wgradients)):
-                avg_wgradients[i] += wgradients[i]
-            for i in xrange(len(avg_bgradients)):
-                avg_bgradients[i] += bgradients[i]
-        for i in xrange(len(avg_wgradients)): avg_wgradients[i] = avg_wgradients[i]/float(sz)
-        for i in xrange(len(avg_bgradients)): avg_bgradients[i] = avg_bgradients[i]/float(sz)
+            avg_wgradients = add_list(avg_wgradients, wgradients)
+            avg_bgradients = add_list(avg_bgradients, bgradients)
+
+        for i in xrange(len(avg_wgradients)):
+            avg_wgradients[i] = avg_wgradients[i]/float(sz)
+        for i in xrange(len(avg_bgradients)):
+            avg_bgradients[i] = avg_bgradients[i]/float(sz)
 
         return (avg_wgradients, avg_bgradients)
 
@@ -120,11 +141,14 @@ class NeuralNetwork(object):
             a0 = outputs[l]
             a1 = outputs[l+1]
             wgradient = np.dot(d,a0.T) # h x 1,1 x v -> h x v
+            print '==', 'w',l,':', wgradient, np.sum(wgradient != 0.0)
             bgradient = d # h x 1
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
             # update d for next layer, i.e. layer l-1
             d = np.dot(self.weights[l].T,d) * (a0*(1-a0)) # d at layer l
+            print '##',d
+            print '**',self.weights[l].T
             # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
         return (wgradients, bgradients)
 
@@ -163,6 +187,7 @@ class NeuralNetwork(object):
         return 0.5 * np.sum((output - label)**2)
 
     def evaluate(self, test_data, test_label):
+        print 'predict shape:', self.predict(test_data).shape, 'label shape:',test_label.shape
         correct = np.sum(self.predict(test_data) == test_label.T) # test_label: 10000 x 1
         return correct, correct/float(len(test_data))
 
@@ -177,7 +202,7 @@ class TestNeuralNetwork(unittest.TestCase):
         self.test_data = self.processor.loadMNISTimages(self.config.get('DEFAULT','test_images_file'))
         self.test_label = self.processor.loadLabels(self.config.get('DEFAULT','test_labels_file'))
 
-        opt = {'learning_rate':1.0, \
+        opt = {'learning_rate':3.0, \
         'weight_decay': 1e-3, \
         'tolerance':0.01, \
         'batch_size':100, \
@@ -191,7 +216,7 @@ class TestNeuralNetwork(unittest.TestCase):
         print self.train_data.shape, self.test_data.shape
         self.nn.train(self.train_data, self.train_label)
         print self.nn.evaluate(self.test_data, self.test_label)
-        print 'good'
+        #print 'good'
 
         #nn = NeuralNetwork([784, 30, 10], opt)
         #nn.train(train_data, train_label)
