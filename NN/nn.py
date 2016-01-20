@@ -21,6 +21,9 @@ def idxmapping(idx, rowsize, colsize):
     col = idx % colsize
     return row,col
 
+def decay(init_rate, t):
+    return np.exp(1.0/t - 1) * init_rate;
+
 def euclid_norm(matrix):
     return np.sqrt(np.sum(matrix**2))
 
@@ -41,9 +44,11 @@ class NeuralNetwork(object):
             self.weights.append( 0.1 * np.random.randn( architecture[idx+1], architecture[idx] ) ) # L x H x V (append L times: V x H)
             self.biases.append( 0.1 * np.random.randn( architecture[idx+1], 1 ) ) # L x H (append L times: H x 1)
         self.learning_rate = opt['learning_rate']
+        self.fix_learning_rate = opt['learning_rate']
         self.tolerance = opt['tolerance']
         self.batch_size = opt['batch_size']
         self.maxecho = opt['maxecho']
+        self.lambda_ = opt['lambda']
 
     def normalize(self, input_data):
         input_data = input_data / 255.0
@@ -106,7 +111,9 @@ class NeuralNetwork(object):
 
         return (avg_wgradients, avg_bgradients)
 
-    def update(self, wgradients, bgradients):
+    def update(self, wgradients, bgradients, iteration = None):
+        if iteration:
+            self.learning_rate = decay(self.fix_learning_rate, iteration)
         for idx in xrange(self.L):
             self.weights[idx] -= self.learning_rate * wgradients[idx]
             self.biases[idx] -= self.learning_rate * bgradients[idx]
@@ -153,7 +160,8 @@ class NeuralNetwork(object):
             # at layer l, current d is at l+1
             a0 = outputs[l]
             a1 = outputs[l+1]
-            wgradient = np.dot(d,a0.T) # h x 1,1 x v -> h x v
+            wgradient = np.dot(d,a0.T) #\
+                #+ self.lambda_*self.weights[l]# h x 1,1 x v -> h x v
             bgradient = d # h x 1
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
@@ -208,7 +216,12 @@ class NeuralNetwork(object):
         return output #  1 x N
 
     def cost(self, output, label):
-        return 0.5 * np.sum((output - label)**2) #/ output.shape[0]
+        return 0.5 * np.sum((output - label)**2) #\
+        #+ 0.5 * self.lambda_ * sum([np.sum(weight**2) for weight in self.weights])
+        # influence: 1) dJ/dW, J has an additional term lambda/2 * (||W1||+||W2||+...+||WL||)
+                    # we should add a term on its gradient dJ/dW, for Wl, its:
+                    # lambda * Wl
+                    #2)
 
     def getCost(self, input_data, label): # for a mini batch
         output = self.predict_output(input_data)
@@ -232,9 +245,10 @@ class TestNeuralNetwork(unittest.TestCase):
 
         opt = {'learning_rate':3.0, \
         'weight_decay': 1e-3, \
-        'tolerance':0.01, \
-        'batch_size':100, \
-        'maxecho': 1000}
+        'tolerance': 0.01, \
+        'batch_size': 100, \
+        'maxecho': 1000, \
+        'lambda': 1e-3 }
         self.nn = NeuralNetwork([784, 30, 10], opt)
         self.train_data = self.nn.normalize(self.train_data)
         self.test_data = self.nn.normalize(self.test_data)
