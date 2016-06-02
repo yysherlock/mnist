@@ -1,4 +1,6 @@
-import sys,os
+import sys
+import os
+import time
 import numpy as np
 import unittest
 import configparser
@@ -22,7 +24,8 @@ def idxmapping(idx, rowsize, colsize):
     return row,col
 
 def decay(init_rate, t):
-    return np.exp(1.0/t - 1) * init_rate;
+    #return np.exp(1.0/t - 1) * init_rate
+    return np.exp(1.0/(t**(1.0/7)) - 1) * init_rate
 
 def euclid_norm(matrix):
     return np.sqrt(np.sum(matrix**2))
@@ -58,7 +61,7 @@ class NeuralNetwork(object):
     def train(self, train_data, train_label):
         """stochastic gradient descent version of training"""
         converge = False
-        iteration = 0
+        iteration = 1
         start = 0
         org_label = train_label
         train_label = transform_output(train_label)
@@ -75,13 +78,10 @@ class NeuralNetwork(object):
 
             print 'cost:', self.cost(self.predict_output(train_data), train_label), \
             'acc:', self.evaluate(train_data, org_label)
-            #print self.weights
-            #print self.biases
-            #print '-------------------'
 
             wgradients_magnitude = np.array([ np.linalg.norm(wgradient) for wgradient in wgradients ])
             bgradients_magnitude = np.array([ np.linalg.norm(bgradient) for bgradient in bgradients ])
-            self.update(wgradients, bgradients)
+            self.update(wgradients, bgradients, iteration)
             if np.sum(wgradients_magnitude) < self.tolerance and np.sum(bgradients_magnitude) < self.tolerance:
                 converge = True
 
@@ -101,6 +101,11 @@ class NeuralNetwork(object):
             data = batch_data[i][np.newaxis].T # ith row, v x 1
             label = batch_label[i][np.newaxis].T #
             wgradients, bgradients = self.applygradient(data, label)
+
+            # gradient check
+            #layer = 1
+            #self.gradient_check(data, label, wgradients[layer], bgradients[layer], layer)
+
             avg_wgradients = add_list(avg_wgradients, wgradients)
             avg_bgradients = add_list(avg_bgradients, bgradients)
 
@@ -154,36 +159,40 @@ class NeuralNetwork(object):
             outputs.append(a0)
 
         # d: h x 1
-        d = - outputs[self.L] * (1-outputs[self.L]) * (train_label-outputs[self.L]) # at layer L, initial, 10 x 1
+        # d = - outputs[self.L] * (1-outputs[self.L]) * (train_label-outputs[self.L]) # at layer L, initial, 10 x 1
+        d = outputs[self.L] - train_label
+
         for l in xrange(self.L-1,-1,-1): # L-1 ~ 0
             # calculate gradient at layer l, l range from L-1 to 0
             # at layer l, current d is at l+1
             a0 = outputs[l]
             a1 = outputs[l+1]
-            wgradient = np.dot(d,a0.T) #\
-                #+ self.lambda_*self.weights[l]# h x 1,1 x v -> h x v
+            wgradient = np.dot(d,a0.T) + self.lambda_*self.weights[l]# h x 1,1 x v -> h x v
             bgradient = d # h x 1
             wgradients = [wgradient] + wgradients
             bgradients = [bgradient] + bgradients
 
-            # gradient check
-            numeric_wgradient, wsample = self.computeNumericGradient(train_data.T, train_label.T, self.weights[l])
-            numeric_bgradient, bsample = self.computeNumericGradient(train_data.T, train_label.T, self.biases[l])
-            for x,ws in enumerate(wsample):
-                index = idxmapping(ws, *self.weights[l].shape)
-                close = np.isclose(wgradient[index], numeric_wgradient[x])
-                diffw = np.linalg.norm(wgradient[index] - numeric_wgradient[x])
-                print 'diffw:', diffw, close
-
-            for x,bs in enumerate(bsample):
-                index = idxmapping(bs, *self.biases[l].shape)
-                close = np.isclose(bgradient[index], numeric_bgradient[x])
-                diffb = np.linalg.norm(bgradient[index] - numeric_bgradient[x])
-
             # update d for next layer, i.e. layer l-1
             d = np.dot(self.weights[l].T,d) * (a0*(1-a0)) # d at layer l
             # v x h, h x 1 -> v x 1 * v x 1 -> v x 1
+
         return (wgradients, bgradients)
+
+    def gradient_check(self, sampled_data, sampled_label, wgradient, bgradient, layer = 1):
+        # gradient check
+        numeric_wgradient, wsample = self.computeNumericGradient(sampled_data.T, sampled_label.T, self.weights[layer])
+        numeric_bgradient, bsample = self.computeNumericGradient(sampled_data.T, sampled_label.T, self.biases[layer])
+        for x,ws in enumerate(wsample):
+            index = idxmapping(ws, *self.weights[layer].shape)
+            close = np.isclose(wgradient[index], numeric_wgradient[x])
+            diffw = np.linalg.norm(wgradient[index] - numeric_wgradient[x])
+            print 'diffw:', diffw, close
+
+        for x,bs in enumerate(bsample):
+            index = idxmapping(bs, *self.biases[layer].shape)
+            close = np.isclose(bgradient[index], numeric_bgradient[x])
+            diffb = np.linalg.norm(bgradient[index] - numeric_bgradient[x])
+            print 'diffb:', diffb, close
 
     def feedforward(self, a0, weight, bias):
         """ a0 -- z1 -- a1, return a1 """
@@ -215,9 +224,16 @@ class NeuralNetwork(object):
         output = input_data # 1 x 10
         return output #  1 x N
 
-    def cost(self, output, label):
-        return 0.5 * np.sum((output - label)**2) #\
-        #+ 0.5 * self.lambda_ * sum([np.sum(weight**2) for weight in self.weights])
+    def cost(self, output, label): # cost contributed by one training point
+        # When use quadratic cost function
+        # return 0.5 * np.sum((output - label)**2)
+
+        # When top layer is softmax layer:
+        # return np.sum(np.nan_to_num(-np.log(output) * label))
+
+        # When top layer is sigmoid layer
+        return np.sum(-label*np.log(output) - (1-label)*np.log(1-output)) \
+        + 0.5 * self.lambda_ * sum([np.sum(weight**2) for weight in self.weights])
         # influence: 1) dJ/dW, J has an additional term lambda/2 * (||W1||+||W2||+...+||WL||)
                     # we should add a term on its gradient dJ/dW, for Wl, its:
                     # lambda * Wl
@@ -244,11 +260,10 @@ class TestNeuralNetwork(unittest.TestCase):
         self.test_label = self.processor.loadLabels(self.config.get('DEFAULT','test_labels_file'))
 
         opt = {'learning_rate':3.0, \
-        'weight_decay': 1e-3, \
         'tolerance': 0.01, \
         'batch_size': 100, \
         'maxecho': 1000, \
-        'lambda': 1e-3 }
+        'lambda': 1e-3 } # weight_decay
         self.nn = NeuralNetwork([784, 30, 10], opt)
         self.train_data = self.nn.normalize(self.train_data)
         self.test_data = self.nn.normalize(self.test_data)
